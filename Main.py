@@ -1,6 +1,3 @@
-# Jacob Wanner
-# Student ID: 011977947
-
 import csv
 import datetime
 from Truck import Truck
