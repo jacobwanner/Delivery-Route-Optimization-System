@@ -28,6 +28,11 @@ def load_packages_to_hash_table(filename, hash_table):
             weight = row[6]
             status = "At WGUPS Hub"
 
+            # Define the correction time for package #9 (10:20 a.m.)
+            correction_time = None
+            if package_id == 9:
+                correction_time = datetime.timedelta(hours=10, minutes=20)
+
             package = Package(package_id, address, city, state, zipcode, deadline, weight, status)
             hash_table.insert(package_id, package)
 
@@ -55,9 +60,9 @@ def get_distance(address1_id, address2_id):
 
 
 # Initialize truck objects
-truck1 = Truck(18, None, [1, 13, 14, 15, 16, 19, 20, 29, 30, 31, 34, 37, 40], 0.0, "4001 South 700 East", datetime.timedelta(hours=8))
-truck2 = Truck(18, None, [2, 4, 5, 6, 7, 8, 9, 10, 11, 25, 28, 32, 33, 39], 0.0, "4001 South 700 East", datetime.timedelta(hours=9, minutes=5))
-truck3 = Truck(18, None, [3, 12, 17, 18, 21, 22, 23, 24, 26, 27, 35, 36, 38], 0.0, "4001 South 700 East", datetime.timedelta(hours=10, minutes=20))
+truck1 = Truck(1,18, None, [1, 13, 14, 15, 16, 19, 20, 29, 30, 31, 34, 37, 40], 0.0, "4001 South 700 East", datetime.timedelta(hours=8))
+truck2 = Truck(2, 18, None, [3, 5, 6, 7, 8, 10, 11, 18, 25, 28, 32, 33, 36, 38], 0.0, "4001 South 700 East", datetime.timedelta(hours=9, minutes=5))
+truck3 = Truck(3,18, None, [2, 4, 9, 12, 17, 21, 22, 23, 24, 26, 27, 35, 39], 0.0, "4001 South 700 East", datetime.timedelta(hours=10, minutes=20))
 
 
 # Delivery function to deliver packages using nearest neighbor algorithm
@@ -82,7 +87,7 @@ def deliver_packages(truck):
         truck.time += datetime.timedelta(hours=nearest_distance / 18)
         nearest_package.delivery_time = truck.time
         nearest_package.departure_time = truck.depart_time
-
+        nearest_package.which_truck = f"truck{truck.number}"
 
 # Load packages into the hash table
 load_packages_to_hash_table("CSV/WGUPS Package File.csv", package_hash_table)
@@ -91,8 +96,16 @@ load_packages_to_hash_table("CSV/WGUPS Package File.csv", package_hash_table)
 deliver_packages(truck1)
 deliver_packages(truck2)
 
-# Ensures truck3 waits for truck1 or truck2 to finish before departing
-truck3.depart_time = min(truck1.time, truck2.time)
+# Ensure truck3 waits for either truck1 or truck2 to finish but also departs after 10:20 AM.
+truck3_depart_time = min(truck1.time, truck2.time)
+
+# Only deliver package 9
+package9 = package_hash_table.search(9)
+package9.street = "410 S State St"
+package9.city = "Salt Lake City"
+package9.state = "UT"
+package9.zipcode = "84111"
+
 deliver_packages(truck3)
 
 
@@ -110,66 +123,48 @@ class WGUPSInterface:
         print(f"Western Governors University Parcel Service (WGUPS)")
         print(f"Total mileage for all routes: {total_miles:.2f} miles.")
 
-    def get_user_time(self):
-        # Prompt the user to input the time in HH:MM format and return the timedelta object
-        while True:
-            try:
-                user_input = input("Enter a specific time to check the status of the packages (HH:MM): ")
-                hours, minutes = user_input.split(":")
-                return datetime.timedelta(hours=int(hours), minutes=int(minutes))
-            except ValueError:
-                # Handle incorrect time format input
-                print("Invalid input format. Please enter time in HH:MM format.")
-
     def get_package_status(self, convert_timedelta):
         # Prompt the user to check the status of a single package or all packages
-        while True:
-            user_choice = input("Would you like to check the status of one package or all? (Enter 'solo' or 'all'): ").strip().lower()
 
+            user_choice = input("Would you like to check the status of one package or all? (Enter 'solo' or 'all'): ").strip().lower()
             if user_choice == 'solo':
                 # Call function to check the status of a single package
                 self.check_single_package(convert_timedelta)
             elif user_choice == 'all':
                 # Call function to check the status of all packages
                 self.check_all_packages(convert_timedelta)
+            elif user_choice == 'quit':
+                return "quit"
             else:
                 # Handle invalid input choice
                 print("Invalid choice. Please enter 'solo' or 'all'.")
-                continue
-            break
+
+    def get_user_time(self):
+        # Prompt the user to input the time in HH:MM format and return the timedelta object
+            user_input = input("Enter a specific time to check the status of the packages (HH:MM): ")
+            hours, minutes = user_input.split(":")
+            return datetime.timedelta(hours=int(hours), minutes=int(minutes))
 
     def check_single_package(self, convert_timedelta):
         # Prompt user to input a package ID and display its status
-        while True:
-            try:
-                package_id = int(input("Enter the Package ID: "))
-                package = self.package_hash_table.search(package_id)  # Find the package using hash table
-                package.update_status(convert_timedelta)  # Update the package status based on the time
-                print(str(package))  # Print the package details
-                break
-            except (ValueError, KeyError):
-                # Handle invalid package ID input
-                print("Invalid Package ID. Please try again.")
-                continue
+            package_id = int(input("Enter the Package ID: "))
+            package = self.package_hash_table.search(package_id)  # Find the package using hash table
+            print(package.get_package_info(convert_timedelta))  # Print the package details
 
     def check_all_packages(self, convert_timedelta):
         # Display the status of all packages (1 through 40)
         for package_id in range(1, 41):
-            try:
-                package = self.package_hash_table.search(package_id)  # Find the package using hash table
-                package.update_status(convert_timedelta)  # Update the package status based on the time
-                print(str(package))  # Print the package details
-            except KeyError:
-                # Handle case when a package ID is not found
-                print(f"Package ID {package_id} not found.")
-                continue
+            package = self.package_hash_table.search(package_id)  # Find the package using hash table
+            print(package.get_package_info(convert_timedelta))  # Print the package details
 
     def run(self):
         # Run the main interface for displaying mileage and getting user input for package status
-        self.display_mileage()
-        convert_timedelta = self.get_user_time()  # Get user time input
-        self.get_package_status(convert_timedelta)  # Get package status based on time
-
+        while True:
+            self.display_mileage()
+            convert_timedelta = self.get_user_time()  # Get user time input
+            x = self.get_package_status(convert_timedelta)  # Get package status based on time
+            if x == "quit":
+                break
 
 # Create the interface object and run it
 interface = WGUPSInterface(truck1, truck2, truck3, package_hash_table)
